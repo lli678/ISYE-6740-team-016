@@ -207,6 +207,36 @@ print("Selected features (top 30 shown):")
 print(selected_features[:30])
 
 
+# In[45]:
+
+
+import matplotlib.pyplot as plt
+
+
+# In[47]:
+
+
+top6 = selected_features[:6]
+plt.figure(figsize=(16, 12))
+
+for i, feature in enumerate(top6, 1):
+    plt.subplot(3, 2, i)
+
+    # raw values
+    x = X_proc_df[feature]
+    y = y  # original price
+    
+    # scatter plot
+    plt.scatter(x, y, alpha=0.3)
+    
+    plt.xlabel(feature)
+    plt.ylabel("Price ($)")
+    plt.title(f"Price vs. {feature}")
+
+plt.tight_layout()
+plt.show()
+
+
 # In[17]:
 
 
@@ -376,8 +406,8 @@ def explain_listing_from_selected_vars(row, pred_price, actual_price):
         tag = "Reasonable"
 
     explanation = (
-        f"{room_type} in {neighbourhood} with {bedrooms} bedrooms, {beds} beds, "
-        f"and capacity {accommodates} is expected around ${pred_price:.0f}. "
+        f"{room_type} in {neighbourhood} with {bedrooms:.2f} bedrooms, {beds:.2f} beds, "
+        f"and capacity {accommodates:.2f} is expected around ${pred_price:.0f}. "
         f"Your listing is ${actual_price:.0f} ({deviation_pct:+.1f}%). "
         f"Category: {tag}. "
         f"Key drivers include neighborhood group, room type, cleaning fee, "
@@ -387,7 +417,7 @@ def explain_listing_from_selected_vars(row, pred_price, actual_price):
     return explanation
 
 
-# In[29]:
+# In[28]:
 
 
 test_results = pd.DataFrame({
@@ -396,7 +426,7 @@ test_results = pd.DataFrame({
 }, index=X_test.index)
 
 
-# In[30]:
+# In[29]:
 
 
 explanations = []
@@ -413,10 +443,60 @@ for idx, row in X_test.iterrows():
 test_results["explanation"] = explanations
 
 
+# In[30]:
+
+
+test_results['explanation'][1288]
+
+
 # In[31]:
 
 
-test_results['explanation'][0]
+results.shape
+
+
+# In[32]:
+
+
+results['tag_80_120'].eq('Reasonable').sum()
+
+
+# In[33]:
+
+
+results['tag_80_120'].eq('Underpriced').sum()
+
+
+# In[34]:
+
+
+results['tag_80_120'].eq('Overpriced').sum()
+
+
+# In[35]:
+
+
+new_listing = {
+    'neighbourhood_cleansed': 'Capitol Hill',
+    'neighbourhood_group_cleansed': 'Central Area',
+    'property_type': 'House',
+    'room_type': 'Entire home/apt',
+    'accommodates': 6,
+    'bedrooms': 3,
+    'bathrooms': 2.0,
+    'beds': 3,
+    'host_is_superhost': 1,
+    'cleaning_fee': 50.0,
+    'minimum_nights': 2,
+    'maximum_nights': 90,
+    'number_of_reviews': 25,
+    'review_scores_rating': 4.8,
+    'availability_30': 15,
+    'availability_60': 30,
+    'availability_90': 45,
+    'availability_365': 200,
+    'instant_bookable': 1
+}
 
 
 # In[ ]:
@@ -425,10 +505,86 @@ test_results['explanation'][0]
 
 
 
-# In[ ]:
+# In[36]:
+
+
+new_listing_df = pd.DataFrame([new_listing])
+
+
+# In[37]:
+
+
+new_listing_df
+
+
+# In[38]:
+
+
+# tmp = pd.concat([new_df, pd.Series([0], name='price')], axis=1)
+
+
+# In[39]:
+
+
+# num_cols = X.select_dtypes(include=np.number).columns.tolist()
+
+# ---- FIX: Remove identifier columns ----
+# id_like_cols = ["listing_id", "id", "host_id",'host_response_rate','host_acceptance_rate','host_listings_count','host_total_listings_count']
+# num_cols = [c for c in num_cols if c in new_listing]
+
+
+# In[40]:
+
+
+# 1. Columns used in the trained model
+model_features = X_train.columns.tolist()
+
+# 2. Columns actually present in the new listing
+new_features = new_listing_df.columns.tolist()
+
+# 3. Intersection (only variables that appear in BOTH)
+valid_features = [col for col in model_features if col in new_features]
+
+print("Number of usable features:", len(valid_features))
+print("These features will be used:")
+print(valid_features)
 
 
 
+# In[41]:
+
+
+# Rebuild the preprocessor using the filtered feature list.
+numeric_features = [c for c in valid_features if new_listing_df[c].dtype != 'object']
+categorical_features = [c for c in valid_features if new_listing_df[c].dtype == 'object']
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    ],
+    remainder='drop'
+)
+
+
+# In[42]:
+
+
+X_train_subset = X_train[valid_features]
+preprocessor.fit(X_train_subset)
+
+
+# In[43]:
+
+
+new_processed = preprocessor.transform(new_listing_df[valid_features])
+
+
+# In[44]:
+
+
+predicted_price = model.predict(new_processed)[0]
+predicted_price
 
 
 # In[ ]:
